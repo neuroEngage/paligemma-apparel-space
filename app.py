@@ -255,14 +255,6 @@ if __name__ == "__main__":
             print("Running startup warmup prediction to JIT-compile JAX graph...", flush=True)
             warmup_img = Image.new("RGB", (224, 224), color="white")
             _ = predict(warmup_img)
-            
-            # Pre-cache test_shirt.jpg prediction
-            test_img_path = os.path.join(os.path.dirname(__file__), "test_shirt.jpg")
-            if os.path.exists(test_img_path):
-                print("Pre-caching test_shirt.jpg predictions...", flush=True)
-                test_img = Image.open(test_img_path)
-                _ = predict(test_img)
-            
             print("Warmup complete! Model is ready and JIT-compiled.", flush=True)
         except Exception as e:
             print("Warmup failed:", e, flush=True)
