@@ -233,7 +233,6 @@ with gr.Blocks(css=css, title="PaliGemma Apparel Descriptor") as demo:
     """)
 
     run_btn.click(fn=predict, inputs=[img_input, prompt_choice], outputs=output)
-    img_input.submit(fn=predict, inputs=[img_input, prompt_choice], outputs=output)
 
 if __name__ == "__main__":
     demo.launch(server_name="0.0.0.0", server_port=7860)
