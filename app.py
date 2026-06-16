@@ -120,7 +120,7 @@ def get_image_hash(pil_img: Image.Image) -> str:
     return hashlib.md5(img_byte_arr.getvalue()).hexdigest()
 
 # ── Core predict function ─────────────────────────────────────────────────────
-def predict(image, prompt_choice):
+def predict(image):
     """Run PaliGemma inference and return the apparel description."""
     if image is None:
         return "⚠️ Please upload an image first."
@@ -137,13 +137,13 @@ def predict(image, prompt_choice):
 
         # Check prediction cache
         img_hash = get_image_hash(pil_img)
-        cache_key = (img_hash, prompt_choice)
+        cache_key = img_hash
         if cache_key in PREDICTION_CACHE:
             print("Cache hit! Returning cached prediction.", flush=True)
             return PREDICTION_CACHE[cache_key]
 
-        # Choose prefix
-        prefix = DETAILED_PROMPT if prompt_choice == "Detailed Product Attributes" else DEFAULT_PROMPT
+        # Use the training prefix which automatically generates detailed attributes
+        prefix = DEFAULT_PROMPT
 
         # 1. Preprocess image
         processed = pu.preprocess_image(pil_img)
@@ -216,21 +216,12 @@ with gr.Blocks(css=css, title="PaliGemma Apparel Descriptor") as demo:
                 label="Upload Apparel Image",
                 elem_id="input-image",
             )
-            prompt_choice = gr.Radio(
-                choices=["Simple Caption (caption en)", "Detailed Product Attributes"],
-                value="Simple Caption (caption en)",
-                label="Output Style",
-                info=(
-                    "'Simple Caption' uses the training prefix and gives a quick description. "
-                    "'Detailed Product Attributes' uses a structured product-catalog prompt."
-                ),
-            )
             run_btn = gr.Button("🔍 Analyse", variant="primary")
             gr.Examples(
                 examples=[
-                    ["test_shirt.jpg", "Simple Caption (caption en)"]
+                    ["test_shirt.jpg"]
                 ],
-                inputs=[img_input, prompt_choice]
+                inputs=[img_input]
             )
 
         with gr.Column(scale=1):
@@ -255,7 +246,7 @@ with gr.Blocks(css=css, title="PaliGemma Apparel Descriptor") as demo:
     </details>
     """)
 
-    run_btn.click(fn=predict, inputs=[img_input, prompt_choice], outputs=output)
+    run_btn.click(fn=predict, inputs=[img_input], outputs=output)
 
 if __name__ == "__main__":
     # ── Startup Warmup prediction to JIT-compile JAX graph ────────────────────
@@ -263,15 +254,14 @@ if __name__ == "__main__":
         try:
             print("Running startup warmup prediction to JIT-compile JAX graph...", flush=True)
             warmup_img = Image.new("RGB", (224, 224), color="white")
-            _ = predict(warmup_img, "Simple Caption (caption en)")
+            _ = predict(warmup_img)
             
-            # Pre-cache test_shirt.jpg prediction for both styles
+            # Pre-cache test_shirt.jpg prediction
             test_img_path = os.path.join(os.path.dirname(__file__), "test_shirt.jpg")
             if os.path.exists(test_img_path):
                 print("Pre-caching test_shirt.jpg predictions...", flush=True)
                 test_img = Image.open(test_img_path)
-                for choice in ["Simple Caption (caption en)", "Detailed Product Attributes"]:
-                    _ = predict(test_img, choice)
+                _ = predict(test_img)
             
             print("Warmup complete! Model is ready and JIT-compiled.", flush=True)
         except Exception as e:
