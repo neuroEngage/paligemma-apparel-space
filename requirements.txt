@@ -1,0 +1,21 @@
+gradio>=4.0
+huggingface_hub
+sentencepiece
+numpy
+Pillow
+
+# JAX + Flax on CPU (required for big_vision model inference)
+jax[cpu]
+flax
+optax
+
+# TensorFlow CPU only (used for bilinear+antialias image resize, same as training)
+tensorflow-cpu
+
+# big_vision dependencies
+ml_collections
+einops
+absl-py
+
+# NOTE: big_vision itself has no setup.py so it cannot be pip-installed.
+# paligemma_utils.py clones it at runtime into /tmp and adds it to sys.path.

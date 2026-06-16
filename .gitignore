@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# Large model files — stored in HuggingFace, not git
+*.npz
+*.bin
+*.safetensors
+*.model
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+venv/
+env/
