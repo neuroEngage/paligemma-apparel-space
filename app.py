@@ -122,6 +122,9 @@ def get_image_hash(pil_img: Image.Image) -> str:
 # ── Core predict function ─────────────────────────────────────────────────────
 def predict(image):
     """Run PaliGemma inference and return the apparel description."""
+    import time
+    t0 = time.time()
+    print("[app.py] Inference request received.", flush=True)
     if image is None:
         return "⚠️ Please upload an image first."
 
@@ -139,7 +142,7 @@ def predict(image):
         img_hash = get_image_hash(pil_img)
         cache_key = img_hash
         if cache_key in PREDICTION_CACHE:
-            print("Cache hit! Returning cached prediction.", flush=True)
+            print("[app.py] Cache hit! Returning cached prediction.", flush=True)
             return PREDICTION_CACHE[cache_key]
 
         # Use the training prefix which automatically generates detailed attributes
@@ -183,6 +186,7 @@ def predict(image):
 
         result_text = raw_text.strip() if raw_text.strip() else "(Model returned empty output)"
         
+        print(f"[app.py] Inference completed in {time.time() - t0:.2f} seconds.", flush=True)
         # Save to cache
         PREDICTION_CACHE[cache_key] = result_text
         return result_text
