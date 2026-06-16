@@ -41,11 +41,25 @@ _tokenizer = None
 _model     = None
 _params    = None
 _decode_fn = None
+_mesh      = None
+_data_sharding = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Internal helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _get_sharding():
+    """Return (and cache) global JAX mesh and sharding to avoid recompilation."""
+    global _mesh, _data_sharding
+    if _mesh is None:
+        import jax
+        _mesh = jax.sharding.Mesh(jax.devices(), ("data",))
+        _data_sharding = jax.sharding.NamedSharding(
+            _mesh, jax.sharding.PartitionSpec("data")
+        )
+    return _mesh, _data_sharding
+
 
 def _ensure_big_vision():
     """Clone big_vision once into /tmp and add it to sys.path."""
@@ -249,13 +263,9 @@ def decode(
 
     _, loaded_params, decode_fn = _get_model_and_params()
 
-    mesh          = jax.sharding.Mesh(jax.devices(), ("data",))
-    data_sharding = jax.sharding.NamedSharding(
-        mesh, jax.sharding.PartitionSpec("data")
-    )
+    _, data_sharding = _get_sharding()
 
     batch = big_vision.utils.reshard(batch, data_sharding)
-
     predicted = decode_fn(
         {"params": loaded_params},
         batch,
@@ -268,12 +278,8 @@ def decode(
 def reshard_batch(batch: dict) -> dict:
     """Reshard a batch onto JAX devices — same as big_vision.utils.reshard."""
     _ensure_big_vision()
-    import jax
     import big_vision.utils
-    mesh          = jax.sharding.Mesh(jax.devices(), ("data",))
-    data_sharding = jax.sharding.NamedSharding(
-        mesh, jax.sharding.PartitionSpec("data")
-    )
+    _, data_sharding = _get_sharding()
     return big_vision.utils.reshard(batch, data_sharding)
 
 

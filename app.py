@@ -43,14 +43,8 @@ if tokenizer_path:
     except Exception as e:
         print("Tokenizer load error:", e)
 
-# Load params (raw npz, passed to paligemma_utils.decode)
+# Parameters loading is deferred to paligemma_utils to avoid duplicate RAM usage
 params_npz = None
-if params_path:
-    try:
-        params_npz = np.load(params_path, allow_pickle=True)
-        print("Params loaded. Keys (first 5):", list(params_npz.keys())[:5])
-    except Exception as e:
-        print("Params load error:", e)
 
 # ── Import helper module ──────────────────────────────────────────────────────
 PALIGEMMA_UTILS_PRESENT = False
@@ -113,6 +107,18 @@ Brand: [If identifiable, otherwise state "Not specified"]
    - [A brief paragraph summarizing the key visual aspects of the item.]
 """
 
+# ── Prediction Caching & Hashing ──────────────────────────────────────────────
+import hashlib
+
+PREDICTION_CACHE = {}
+
+def get_image_hash(pil_img: Image.Image) -> str:
+    """Compute MD5 hash of image pixels in a deterministic way."""
+    img_byte_arr = BytesIO()
+    # Save as PNG to get deterministic raw bytes of the image data
+    pil_img.save(img_byte_arr, format="PNG")
+    return hashlib.md5(img_byte_arr.getvalue()).hexdigest()
+
 # ── Core predict function ─────────────────────────────────────────────────────
 def predict(image, prompt_choice):
     """Run PaliGemma inference and return the apparel description."""
@@ -128,6 +134,13 @@ def predict(image, prompt_choice):
     try:
         # Force JPEG (model was trained on JPEGs)
         pil_img = to_jpeg_pil(image)
+
+        # Check prediction cache
+        img_hash = get_image_hash(pil_img)
+        cache_key = (img_hash, prompt_choice)
+        if cache_key in PREDICTION_CACHE:
+            print("Cache hit! Returning cached prediction.", flush=True)
+            return PREDICTION_CACHE[cache_key]
 
         # Choose prefix
         prefix = DETAILED_PROMPT if prompt_choice == "Detailed Product Attributes" else DEFAULT_PROMPT
@@ -153,7 +166,7 @@ def predict(image, prompt_choice):
 
         # 5. Decode
         predicted_tokens = pu.decode(
-            {"params": params_npz},
+            None,
             batch=batch,
             max_decode_len=pu.SEQLEN,
             sampler="greedy",
@@ -168,7 +181,11 @@ def predict(image, prompt_choice):
                 raw_text = raw_text[len(strip_prefix):].lstrip("\n")
                 break
 
-        return raw_text.strip() if raw_text.strip() else "(Model returned empty output)"
+        result_text = raw_text.strip() if raw_text.strip() else "(Model returned empty output)"
+        
+        # Save to cache
+        PREDICTION_CACHE[cache_key] = result_text
+        return result_text
 
     except Exception:
         return "❌ Inference error:\n\n" + traceback.format_exc()
@@ -209,6 +226,12 @@ with gr.Blocks(css=css, title="PaliGemma Apparel Descriptor") as demo:
                 ),
             )
             run_btn = gr.Button("🔍 Analyse", variant="primary")
+            gr.Examples(
+                examples=[
+                    ["test_shirt.jpg", "Simple Caption (caption en)"]
+                ],
+                inputs=[img_input, prompt_choice]
+            )
 
         with gr.Column(scale=1):
             output = gr.Textbox(
@@ -235,4 +258,23 @@ with gr.Blocks(css=css, title="PaliGemma Apparel Descriptor") as demo:
     run_btn.click(fn=predict, inputs=[img_input, prompt_choice], outputs=output)
 
 if __name__ == "__main__":
+    # ── Startup Warmup prediction to JIT-compile JAX graph ────────────────────
+    if PALIGEMMA_UTILS_PRESENT:
+        try:
+            print("Running startup warmup prediction to JIT-compile JAX graph...", flush=True)
+            warmup_img = Image.new("RGB", (224, 224), color="white")
+            _ = predict(warmup_img, "Simple Caption (caption en)")
+            
+            # Pre-cache test_shirt.jpg prediction for both styles
+            test_img_path = os.path.join(os.path.dirname(__file__), "test_shirt.jpg")
+            if os.path.exists(test_img_path):
+                print("Pre-caching test_shirt.jpg predictions...", flush=True)
+                test_img = Image.open(test_img_path)
+                for choice in ["Simple Caption (caption en)", "Detailed Product Attributes"]:
+                    _ = predict(test_img, choice)
+            
+            print("Warmup complete! Model is ready and JIT-compiled.", flush=True)
+        except Exception as e:
+            print("Warmup failed:", e, flush=True)
+
     demo.launch(server_name="0.0.0.0", server_port=7860)
